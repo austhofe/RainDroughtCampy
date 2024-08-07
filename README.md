@@ -1,13 +1,11 @@
 # Southwest Climate Change and Enteric Diseases
 
-#### A research compendium for exploring the effect of precipitation and drought on _Salmonella_ and _Campylobacter_ in the 4 corners states
+#### A research compendium for exploring the effect of precipitation and drought on _Campylobacter_ infections
 
 **Under Review with EHP:** Association between precipitation events, drought, and animal operations with _Campylobacter_ infections in the Southwest US, 2009–2021
-
-**Under Review with One Health:** Association between precipitation events, drought, and animal operations with _Salmonella_ infections in the Southwest US, 2009–2021
  
 
-[Report Bug](https://github.com/austhofe/4CornersCCandFBD/issues) · [Request Feature](https://github.com/austhofe/4CornersCCandFBD/issues) · [Contribute](https://github.com/austhofe/4CornersCCandFBD/pulls)
+[Report Bug](https://github.com/austhofe/RainDroughtCampy/issues) · [Request Feature](https://github.com/austhofe/RainDroughtCampy/issues) · [Contribute](https://github.com/austhofe/RainDroughtCampy/pulls)
 
 ## About The Project
 
@@ -64,4 +62,4 @@ Distributed under the GNU 3.0 License. See `LICENSE.txt` for more information.
 
 Erika Austhof - [barrette\@arizona.edu](mailto:barrette@arizona.edu)
 
-Project Link: <https://github.com/austhofe/4CornersCCandFBD>
+Project Link: <https://github.com/austhofe/RainDroughtCampy>
