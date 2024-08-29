@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/838498951.svg)](https://zenodo.org/doi/10.5281/zenodo.13483258)
+
 # Southwest Climate Change and Enteric Diseases
 
 #### A research compendium for exploring the effect of precipitation and drought on _Campylobacter_ infections
