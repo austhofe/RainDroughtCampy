@@ -1,0 +1,528 @@
+**# Bookmark #1
+import excel "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\ClimateZone Analysis\Major_Climate_Zone_bycounty.xlsx", sheet("Sheet1") firstrow
+rename *, lower
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\Analysis\ClimateZone.dta", replace
+clear
+
+**# import weekly dataset from R
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\complete_weekly_df.csv"
+merge m:1 fips using "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\Analysis\ClimateZone.dta"
+
+**# Clean up campy and sal case count data
+replace total__campy_cases="0" if total__campy_cases=="NA"
+replace total__sal_cases ="0" if total__sal_cases =="NA"
+destring total__campy_cases, replace
+destring total__sal_cases, replace
+
+**# LABELING and dropping variables
+rename v16 longitude
+label variable date "Date, string"
+label variable total__campy_cases "Count of Campy cases reported"
+label variable total__sal_cases "Count of Sal cases reported"
+label variable src "SoVI dataset filename"
+label variable v1 "ID in R"
+label variable valuex "pdsi"
+label variable anomalyx "pdsi_anomaly"
+label variable indexx "pdsi"
+label variable valuey "zndx"
+label variable anomalyy "zndx_anomaly"
+label variable indexy "zndx"
+label variable maxtemp "Weekly max temp"
+label variable mintemp "Weekly min temp"
+label variable avgtemp "Weekly avg temp"
+label variable avgppt "Weekly avg precip"
+label variable maxppt "Weekly max precip"
+label variable minppt "Weekly min precip"
+label variable sumppt "Weekly total precip"
+drop v2 postal_fips_id13 postal_fips_id17 src ncdc_fips_id
+
+replace finalclimatezone="1" if finalclimatezone=="B"
+replace finalclimatezone="2" if finalclimatezone=="2"
+replace finalclimatezone="2" if finalclimatezone=="D"
+destring finalclimatezone, replace
+label define cz 1 "Climate Zone B" 2 "Climate Zone D"
+label values finalclimatezone cz
+
+**# Dropping duplicates for multiple weeks in the year by fips
+duplicates report id fips
+duplicates drop id fips, force
+gen newt = yw(year, week)
+xtset fips newt, weekly
+drop if week==53
+
+**# Generating a state variable
+gen state=.
+replace state=1 if fips>=4001 & fips<=4027
+replace state=2 if fips>=8001 & fips<=8125
+replace state=3 if fips>=35001 & fips<=35061
+replace state=4 if fips>=49001 & fips<=49057
+label define state 1 "AZ" 2 "CO" 3 "NM" 4 "UT"
+label variable state state
+label values state state
+drop if state==1 & year==2021
+
+**# Creating variables for analysis
+//gen weekly lags
+gen campy_lag1 = L1.total__campy_cases
+gen campy_lag2 = L2.total__campy_cases
+gen campy_lag3 = L3.total__campy_cases
+gen campy_lag4 = L4.total__campy_cases
+gen sal_lag1 = L1.total__sal_cases
+gen sal_lag2 = L2.total__sal_cases
+gen sal_lag3 = L3.total__sal_cases
+gen sal_lag4 = L4.total__sal_cases
+
+//create a category for pdsi
+egen pdsi_cat = cut(valuex), at(-10,-4, -3, -2, 2,3,4,10) icodes
+replace pdsi_cat=0 if valuex==-4
+replace pdsi_cat=2 if valuex==-2
+//Recode so that larger values of pdsi mean more severe drought
+recode pdsi_cat (0=7) (1=6) (2=5) (3=4) (4=3) (5=2) (6=1)
+
+//categorizing Z Index
+gen zindex=1 if valuey<0
+replace zindex=0 if valuey>=0
+gen pdsi_std=valuex+10
+gen zindex_std=valuex+10
+
+//new variable for season
+// 1=summer 2=fall 3=winter 4=spring
+gen season=1 if month>=6 & month<=8
+replace season=2 if month>=9 & month<=11
+replace season=3 if month==12 | month==1 | month==2
+replace season=4 if month>=3 & month<=5
+
+gen sumppt_95th=1 if sumppt>=1.19
+gen sumppt_99th=1 if sumppt>=2.1
+replace sumppt_95th=0 if sumppt_95th==.
+replace sumppt_99th=0 if sumppt_99th==.
+gen pdsi_std=valuex+10
+gen pdsi_cat_new=.
+replace pdsi_cat_new= abs(valuex) if valuex<0
+summarize pdsi_cat_new
+replace pdsi_cat_new= -(valuex) if valuex>0
+summarize pdsi_cat_new
+replace pdsi_cat_new=0 if valuex==0
+gen pdsi_std_new= pdsi_cat_new+10
+
+//merging in animal data
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\usdadf_clean.csv", numericcols(5 6 7 8 9) 
+drop in 239
+merge m:m fips using "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\Analysis\AnimalData.dta", keepusing(cattle chicken goatsheepprod sheep greens fips) generate(_merge_animal)
+tab fips if _merge_animal==1
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\usdadf_cleanbygroup.csv"
+merge m:1 fips using "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\Analysis\AnimalData.dta", generate(_merge_animal)
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\Analysis\Complete_Weekly_Data_Tsset_1-25-2023.dta", replace
+tab state if sum_shp>=30
+gen cattle=1 if sum_cattle>=1
+replace cattle=0 if cattle==.
+gen chicken=1 if sum_ck>=1
+replace chicken=0 if chicken==.
+gen goatsheep=1 if sum_goatshp>=1
+replace goatsheep=. if goatsheep==.
+replace goatsheep=0 if goatsheep==.
+gen sheep=1 if sum_shp>=1
+replace sheep=0 if sheep==.
+gen greens=1 if sum_grns>=1
+replace greens=0 if greens==.
+
+// Creating category for usdm 
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\USDM-data-2009-2021.csv"
+gen which_max = "" 
+gen max = 0 
+foreach x in none d0 d1 d2 d3 d4 {
+    replace which_max = "`x'" if `x' > max
+    replace max = `x' if `x' > max
+}
+gen usdm_cat=0 if which_max=="none"
+replace usdm_cat=1 if which_max=="d0"
+replace usdm_cat=2 if which_max=="d1"
+replace usdm_cat=3 if which_max=="d2"
+replace usdm_cat=4 if which_max=="d3"
+replace usdm_cat=5 if which_max=="d4"
+tab usdm_cat
+generate startdate = date( validstart, "MDY")
+gen week=week(startdate)
+gen year=year(startdate)
+drop if year<2009
+tab week
+duplicates list fips week year
+duplicates list fips week
+keep fips which_max max usdm_cat week year
+
+//creating category for spei
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\spei.csv"
+drop state county
+egen spei_cat = cut(spei), at(-10,-1.99,-1.49,-.99,1,1.5,2,10)
+sort spei_cat
+by spei_cat: summarize spei
+tab spei_cat
+gen speicat=1 if spei_cat==2
+replace speicat=2 if spei_cat==1.5
+replace speicat=3 if spei_cat==1
+tostring spei_cat, replace force
+tab spei_cat
+replace speicat=4 if spei_cat=="-.9900000095"
+replace speicat=5 if spei_cat=="-1.49000001"
+replace speicat=6 if spei_cat=="-1.99000001"
+replace speicat=7 if spei_cat=="-10"
+tab spei_cat speicat
+drop spei_cat
+rename speicat spei_cat
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\spei.dta"
+
+**# EXPLORING ANIMAL DENSITY 8/24/2023
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\geo_county.csv"
+drop v1
+replace state="AZ" if state=="ARIZONA"
+replace state="CO" if state=="COLORADO"
+replace state="UT" if state=="UTAH"
+replace state="NM" if state=="NEW MEXICO"
+replace county="dona ana" if county=="doña ana"
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\landarea.dta"
+
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\animal_density.csv"
+drop v1
+drop if fips=="NA"
+destring fips, replace
+
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\animal_density.dta"
+
+
+use "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Complete Weekly Dataset 4-25-2023.dta"
+drop state
+gen state= state_abbr
+replace county=lower(county)
+merge m:1 state county using "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\landarea.dta", generate(_mergela)
+merge m:1 fips year using "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\animal_density.dta", generate(_mergead)
+drop if _mergead==2
+
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Complete Weekly Dataset 8-24-2023.dta"
+
+foreach x in cattle_milk_max cattle_beef_max cattle_total_max ck_broilers_max ck_layers_max goat_meat_max goat_milk_max sheep_total_max {
+gen `x'sqm=`x'/landarea
+}
+
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Complete Weekly Dataset 8-24-2023.dta", replace
+
+**# Campy Lag 3
+foreach x in sumppt heavyppt sumppt_95th sumppt_99th pdsi_std avgtemp {
+	xtgee campy_lag3 `x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom `x', irr
+}
+xtgee campy_lag3 ib4.pdsi_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom 5.pdsi_cat, irr
+lincom 6.pdsi_cat, irr
+lincom 7.pdsi_cat, irr
+
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt, irr
+lincom sumppt + 5.pdsi_cat, irr
+lincom sumppt + 6.pdsi_cat, irr
+lincom sumppt + 7.pdsi_cat, irr
+
+//by state
+foreach x of numlist 1/4 {
+	xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat if state==`x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt, irr
+	lincom sumppt + 5.pdsi_cat, irr
+	lincom sumppt + 6.pdsi_cat, irr
+	lincom sumppt + 7.pdsi_cat, irr
+}
+
+//by climate zone
+foreach x of numlist 1/2 {
+	xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat if finalclimatezone==`x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt, irr
+	lincom sumppt + 5.pdsi_cat, irr
+	lincom sumppt + 6.pdsi_cat, irr
+	lincom sumppt + 7.pdsi_cat, irr
+}
+
+//by urban
+foreach x of numlist 0/1 {
+	xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat if urban==`x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt, irr
+	lincom sumppt + 5.pdsi_cat, irr
+	lincom sumppt + 6.pdsi_cat, irr
+	lincom sumppt + 7.pdsi_cat, irr
+}
+
+//by nchs
+foreach x of numlist 1/6 {
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat if nchs_code==`x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt, irr
+}
+
+//by soi
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat soi, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+soi, irr
+lincom sumppt + 5.pdsi_cat+soi, irr
+lincom sumppt + 6.pdsi_cat+soi, irr
+lincom sumppt + 7.pdsi_cat+soi, irr
+
+
+foreach x of numlist 1/3 {
+	xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat if soi_cat==`x', family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+soi, irr
+lincom sumppt + 5.pdsi_cat+soi, irr
+lincom sumppt + 6.pdsi_cat+soi, irr
+lincom sumppt + 7.pdsi_cat+soi, irr
+}
+
+//changing exposure
+foreach x in heavyppt sumppt_95th sumppt_99th {
+	xtgee campy_lag3 `x' avgtemp ib4.pdsi_cat, family(nbinomial) link(nbinomial) corr(ar)
+	lincom `x', irr
+	lincom `x' + 5.pdsi_cat, irr
+	lincom `x' + 6.pdsi_cat, irr
+	lincom `x' + 7.pdsi_cat, irr
+}
+
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat if covidyear==0, family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt, irr
+	lincom sumppt + 5.pdsi_cat, irr
+	lincom sumppt + 6.pdsi_cat, irr
+	lincom sumppt + 7.pdsi_cat, irr
+
+//animal operations
+foreach x in cattle chicken goatsheep sheep greens {
+	xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat i.`x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt+1.`x', irr
+	lincom sumppt + 5.pdsi_cat+1.`x', irr
+	lincom sumppt + 6.pdsi_cat+1.`x', irr
+	lincom sumppt + 7.pdsi_cat+1.`x', irr
+}
+
+//animal operations categorized
+foreach x in cattle_cat chicken_cat goatshp_cat sheep_cat greens_cat {
+	xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat i.`x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt+1.`x', irr
+	lincom sumppt+2.`x', irr
+	lincom sumppt+3.`x', irr
+}
+
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat i.cattle_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.cattle_cat, irr
+lincom sumppt+2.cattle_cat, irr
+lincom sumppt+3.cattle_cat, irr
+
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat i.chicken_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.chicken_cat, irr
+lincom sumppt+2.chicken_cat, irr
+lincom sumppt+3.chicken_cat, irr
+
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat i.goatshp_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.goatshp_cat, irr
+lincom sumppt+2.goatshp_cat, irr
+lincom sumppt+3.goatshp_cat, irr
+
+xtgee campy_lag3 sumppt avgtemp ib4.pdsi_cat i.sheep_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.sheep_cat, irr
+lincom sumppt+2.sheep_cat, irr
+lincom sumppt+3.sheep_cat, irr
+
+**# ANIMAL ANALYSIS
+**# Cattle
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.cattle, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.cattle, irr
+lincom sumppt + 1.pdsi_cat +1.cattle, irr
+lincom sumppt + 2.pdsi_cat +1.cattle, irr
+lincom sumppt + 3.pdsi_cat +1.cattle, irr
+lincom sumppt + 5.pdsi_cat +1.cattle, irr
+lincom sumppt + 6.pdsi_cat +1.cattle, irr
+lincom sumppt + 7.pdsi_cat +1.cattle, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp sum_cattle, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+sum_cattle, irr
+lincom sumppt + 1.pdsi_cat +sum_cattle, irr
+lincom sumppt + 2.pdsi_cat +sum_cattle, irr
+lincom sumppt + 3.pdsi_cat +sum_cattle, irr
+lincom sumppt + 5.pdsi_cat +sum_cattle, irr
+lincom sumppt + 6.pdsi_cat +sum_cattle, irr
+lincom sumppt + 7.pdsi_cat +sum_cattle, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.cattle_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.cattle_cat, irr
+lincom sumppt+2.cattle_cat, irr
+lincom sumppt+3.cattle_cat, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp cattle_milk_maxsqm, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+cattle_milk_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +cattle_milk_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +cattle_milk_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +cattle_milk_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +cattle_milk_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +cattle_milk_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +cattle_milk_maxsqm , irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp cattle_beef_maxsqm, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+cattle_beef_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +cattle_beef_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +cattle_beef_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +cattle_beef_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +cattle_beef_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +cattle_beef_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +cattle_beef_maxsqm , irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp cattle_total_maxsqm , family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+cattle_total_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +cattle_total_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +cattle_total_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +cattle_total_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +cattle_total_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +cattle_total_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +cattle_total_maxsqm , irr
+
+**# Chicken
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.chicken, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.chicken, irr
+lincom sumppt + 1.pdsi_cat +1.chicken, irr
+lincom sumppt + 2.pdsi_cat +1.chicken, irr
+lincom sumppt + 3.pdsi_cat +1.chicken, irr
+lincom sumppt + 5.pdsi_cat +1.chicken, irr
+lincom sumppt + 6.pdsi_cat +1.chicken, irr
+lincom sumppt + 7.pdsi_cat +1.chicken, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp sum_ck, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+sum_ck, irr
+lincom sumppt + 1.pdsi_cat +sum_ck, irr
+lincom sumppt + 2.pdsi_cat +sum_ck, irr
+lincom sumppt + 3.pdsi_cat +sum_ck, irr
+lincom sumppt + 5.pdsi_cat +sum_ck, irr
+lincom sumppt + 6.pdsi_cat +sum_ck, irr
+lincom sumppt + 7.pdsi_cat +sum_ck, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.chicken_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.chicken_cat, irr
+lincom sumppt+2.chicken_cat, irr
+lincom sumppt+3.chicken_cat, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp ck_broilers_maxsqm, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+ck_broilers_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +ck_broilers_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +ck_broilers_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +ck_broilers_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +ck_broilers_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +ck_broilers_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +ck_broilers_maxsqm , irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp ck_layers_maxsqm, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+ck_layers_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +ck_layers_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +ck_layers_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +ck_layers_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +ck_layers_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +ck_layers_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +ck_layers_maxsqm , irr
+
+**# Goats
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.goatsheep, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.goatsheep, irr
+lincom sumppt + 1.pdsi_cat +1.goatsheep, irr
+lincom sumppt + 2.pdsi_cat +1.goatsheep, irr
+lincom sumppt + 3.pdsi_cat +1.goatsheep, irr
+lincom sumppt + 5.pdsi_cat +1.goatsheep, irr
+lincom sumppt + 6.pdsi_cat +1.goatsheep, irr
+lincom sumppt + 7.pdsi_cat +1.goatsheep, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp sum_goatshp, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+sum_goatshp, irr
+lincom sumppt + 1.pdsi_cat +sum_goatshp, irr
+lincom sumppt + 2.pdsi_cat +sum_goatshp, irr
+lincom sumppt + 3.pdsi_cat +sum_goatshp, irr
+lincom sumppt + 5.pdsi_cat +sum_goatshp, irr
+lincom sumppt + 6.pdsi_cat +sum_goatshp, irr
+lincom sumppt + 7.pdsi_cat +sum_goatshp, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.goatshp_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.goatshp_cat, irr
+lincom sumppt+2.goatshp_cat, irr
+lincom sumppt+3.goatshp_cat, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp goat_meat_maxsqm, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+goat_meat_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +goat_meat_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +goat_meat_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +goat_meat_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +goat_meat_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +goat_meat_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +goat_meat_maxsqm , irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp goat_milk_maxsqm, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+goat_milk_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +goat_milk_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +goat_milk_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +goat_milk_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +goat_milk_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +goat_milk_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +goat_milk_maxsqm , irr
+
+**# Sheeps
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.sheep, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.sheep, irr
+lincom sumppt + 1.pdsi_cat +1.sheep, irr
+lincom sumppt + 2.pdsi_cat +1.sheep, irr
+lincom sumppt + 3.pdsi_cat +1.sheep, irr
+lincom sumppt + 5.pdsi_cat +1.sheep, irr
+lincom sumppt + 6.pdsi_cat +1.sheep, irr
+lincom sumppt + 7.pdsi_cat +1.sheep, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp sum_shp, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+sum_shp, irr
+lincom sumppt + 1.pdsi_cat +sum_shp, irr
+lincom sumppt + 2.pdsi_cat +sum_shp, irr
+lincom sumppt + 3.pdsi_cat +sum_shp, irr
+lincom sumppt + 5.pdsi_cat +sum_shp, irr
+lincom sumppt + 6.pdsi_cat +sum_shp, irr
+lincom sumppt + 7.pdsi_cat +sum_shp, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp i.sheep_cat, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+1.sheep_cat, irr
+lincom sumppt+2.sheep_cat, irr
+lincom sumppt+3.sheep_cat, irr
+
+xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp sheep_total_maxsqm, family(nbinomial) link(nbinomial) corr(ar)
+lincom sumppt+sheep_total_maxsqm, irr
+lincom sumppt + 1.pdsi_cat +sheep_total_maxsqm , irr
+lincom sumppt + 2.pdsi_cat +sheep_total_maxsqm , irr
+lincom sumppt + 3.pdsi_cat +sheep_total_maxsqm , irr
+lincom sumppt + 5.pdsi_cat +sheep_total_maxsqm , irr
+lincom sumppt + 6.pdsi_cat +sheep_total_maxsqm , irr
+lincom sumppt + 7.pdsi_cat +sheep_total_maxsqm , irr
+
+**# Assume missing data in USDA is actually 0
+foreach x in cattle_milk_maxsqm cattle_beef_maxsqm cattle_total_maxsqm ck_broilers_maxsqm ck_layers_maxsqm goat_meat_maxsqm goat_milk_maxsqm sheep_total_maxsqm {
+	gen `x'_nomiss=.
+	replace `x'_nomiss=0 if `x'==.
+}
+
+foreach x in cattle_milk_fillsqm cattle_beef_fillsqm cattle_total_fillsqm ck_broilers_fillsqm ck_layers_fillsqm goat_meat_fillsqm goat_milk_fillsqm sheep_total_fillsqm {
+	xtgee campy_lag3 sumppt ib4.pdsi_cat avgtemp `x', family(nbinomial) link(nbinomial) corr(ar)
+	lincom sumppt+`x', irr
+	lincom sumppt + 1.pdsi_cat +`x', irr
+	lincom sumppt + 2.pdsi_cat +`x', irr
+	lincom sumppt + 3.pdsi_cat +`x', irr
+	lincom sumppt + 5.pdsi_cat +`x', irr
+	lincom sumppt + 6.pdsi_cat +`x', irr
+	lincom sumppt + 7.pdsi_cat +`x', irr
+}
+
+
+
+
+
+
+import delimited "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\animal_density_11-3-2023.csv", numericcols(5 6 7 8 9 10 11 12) 
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\animal_density11-3-2023.dta", replace
+clear
+use "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Complete Weekly Dataset 10-5-2023.dta" 
+merge m:1 fips year using "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Rain and FBD CO\data\animal_density11-3-2023.dta", generate(_merge_ad1132023)
+drop if _merge_ad1132023==2
+drop if _merge_pop==2
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Complete Weekly Dataset 11-3-2023.dta"
+save "C:\Users\erika\Box Sync\Dissertation Work\Aim 2 and 3 GEE Analyses\Complete Weekly Dataset 11-3-2023.dta", replace
+foreach x in cattle_milk_fill cattle_beef_fill cattle_total_fill ck_broilers_fill ck_layers_fill goat_meat_fill goat_milk_fill sheep_total_fill {
+gen `x'sqm=`x'/landarea
+}
+
