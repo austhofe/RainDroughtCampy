@@ -4,7 +4,8 @@
 
 #### A research compendium for exploring the effect of precipitation and drought on _Campylobacter_ infections
 
-**Under Review with EHP:** Association between precipitation events, drought, and animal operations with _Campylobacter_ infections in the Southwest US, 2009–2021
+**Published in EHP:** Association between precipitation events, drought, and animal operations with _Campylobacter_ infections in the Southwest US, 2009–2021
+[Link to Article](https://doi.org/10.1289/EHP14693)
  
 
 [Report Bug](https://github.com/austhofe/RainDroughtCampy/issues) · [Request Feature](https://github.com/austhofe/RainDroughtCampy/issues) · [Contribute](https://github.com/austhofe/RainDroughtCampy/pulls)
